@@ -1,0 +1,57 @@
+name: "test suite and docs"
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  id-token: write
+  pages: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v1
+        with:
+          version: "1.10"
+      - uses: julia-actions/julia-buildpkg@v1
+      - uses: julia-actions/julia-runtest@v1
+
+      # We set up a folder that Pluto can use to cache exported notebooks. If the notebook file did not change, then Pluto can take the exported file from cache instead of running the notebook.
+      - name: Set up notebook state cache
+        uses: actions/cache@v3
+        with:
+          path: pluto_state_cache
+          key: ${{ runner.os }}-pluto_state_cache-v2-${{ hashFiles('**/Project.toml', '**/Manifest.toml', '.github/workflows/*' ) }}-${{ hashFiles('**/*jl') }}
+          restore-keys: |
+              ${{ runner.os }}-pluto_state_cache-v2-${{ hashFiles('**/Project.toml', '**/Manifest.toml', '.github/workflows/*' ) }}
+
+      - name: Run & export Pluto notebooks
+        run: |
+          julia -e 'using Pkg
+            Pkg.activate(mktempdir())
+            Pkg.add([
+              Pkg.PackageSpec(name="PlutoSliderServer", version="0.3.2-0.3"),
+            ])
+
+            import PlutoSliderServer
+
+            PlutoSliderServer.github_action("./docs";
+              Export_cache_dir="pluto_state_cache",
+              Export_baked_notebookfile=false,
+              Export_baked_state=false,
+              # more parameters can go here
+            )'
+
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v3.0.1
+        with:
+          path: .
+
+      - name: Deploy GitHub Pages site
+        uses: actions/deploy-pages@v4.0.5
+
